@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Blocks ALL network access: the page cannot send data anywhere, even by accident. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seating Chart Builder</title>
+<style>
+:root{
+  --ink:#1d2b3a; --muted:#5d6d7b; --paper:#eef3f5; --grid:#d3dde2; --panel:#ffffff; --line:#cfd9de;
+  --oak:#dcc7a3; --oak-d:#b89f74; --accent:#2b6f90; --accent-d:#1f5671; --marker:#f2c14e;
+  --bad:#c4402f; --warn:#d98a1c; --good:#2d8a58;
+  --font:"Avenir Next","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:var(--font);color:var(--ink);background:var(--paper);font-size:14px;display:flex;flex-direction:column}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--marker);outline-offset:2px}
+
+header.top{display:flex;align-items:center;gap:16px;padding:10px 18px;background:var(--ink);color:#fff;flex-wrap:wrap}
+header.top h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.2px}
+header.top .privacy{font-size:12.5px;color:#c9d6df;flex:1;min-width:240px}
+header.top input[type=text]{background:#2b3d50;border:1px solid #476078;color:#fff;border-radius:6px;padding:6px 9px;width:220px}
+header.top input::placeholder{color:#8ea3b4}
+
+.app{flex:1;display:grid;grid-template-columns:372px 1fr;min-height:0}
+aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;padding:11px 3px;font-size:13px;border:0;background:none;font-weight:600;color:var(--muted);border-bottom:3px solid transparent}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs .badge{display:inline-block;min-width:19px;padding:0 5px;margin-left:5px;border-radius:10px;background:var(--bad);color:#fff;font-size:11.5px;line-height:19px}
+.tabs .badge.ok{background:var(--good)}
+.tabpane{padding:14px 16px 24px;overflow:auto;flex:1;display:none}
+.tabpane.on{display:block}
+.tabpane h2{font-size:14px;margin:18px 0 8px}
+.tabpane h2:first-child{margin-top:0}
+.hint{color:var(--muted);font-size:12.5px;line-height:1.45;margin:4px 0 10px}
+
+.btn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 12px;font-weight:600}
+.btn:hover{background:#f1f6f8}
+.btn.primary{background:var(--accent);border-color:var(--accent-d);color:#fff}
+.btn.primary:hover{background:var(--accent-d)}
+.btn.danger{color:var(--bad)}
+.btn.small{padding:4px 9px;font-size:12.5px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.field{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.field input[type=number],.field input[type=text]{width:78px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;color:var(--ink)}
+.field input[type=text]{width:140px}
+textarea{width:100%;height:80px;padding:8px;border:1px solid var(--line);border-radius:6px;resize:vertical}
+.notice{margin:10px 0;padding:9px 11px;border-radius:7px;background:#eaf3f8;border-left:4px solid var(--accent);font-size:12.5px;line-height:1.45;display:none;white-space:pre-line}
+.notice.warn{background:#fdf2e1;border-left-color:var(--warn)}
+
+main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.toolbar{display:flex;gap:8px;align-items:center;padding:9px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.toolbar .sp{flex:1}
+.toolbar label.chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+#selInfo{min-height:34px;padding:7px 14px;font-size:13px;background:#fff8e1;border-bottom:1px solid #ecd9a0;display:flex;align-items:center}
+#selInfo.empty{background:var(--panel);color:var(--muted);border-bottom:1px solid var(--line)}
+#roomWrap{flex:1;overflow:auto;padding:18px}
+#room{position:relative;background-color:#f9fbfc;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:20px 20px;border:2px solid #9fb3bf;border-radius:4px;transform-origin:top left}
+
+.marker{position:absolute;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px;
+  background:var(--marker);color:#4a3600;border:2px solid #c99a1e;border-radius:5px;user-select:none}
+.marker.m-door{background:#cfe3d4;border-color:#6aa57b;color:#1d4a2c}
+.marker.m-window{background:#d3e7f5;border-color:#6fa5c9;color:#1b4560}
+body.editing .marker{cursor:grab;outline:2px dashed rgba(0,0,0,.25);outline-offset:2px}
+
+.table{position:absolute;background:var(--oak);border:2px solid var(--oak-d);border-radius:8px;box-shadow:0 2px 0 rgba(120,95,50,.35)}
+.table.sel{border-color:var(--accent);box-shadow:0 0 0 3px rgba(43,111,144,.35)}
+.thead{height:22px;padding:2px 8px;font-size:11.5px;font-weight:700;color:#5b4720;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.editing .thead{cursor:grab;background:rgba(255,255,255,.35);border-radius:6px 6px 0 0}
+.seat{position:absolute;width:108px;height:44px;border-radius:6px;background:rgba(255,255,255,.55);border:1.5px dashed rgba(90,70,30,.45);transition:background .1s}
+.seat.drop{background:rgba(242,193,78,.75);border-style:solid;border-color:#b98a00}
+.seat.off{background:repeating-linear-gradient(45deg,rgba(0,0,0,.12) 0 6px,transparent 6px 12px);border-color:rgba(0,0,0,.3)}
+body.editing .seat{cursor:pointer}
+body.editing .seat:hover{background:rgba(255,255,255,.9)}
+
+.chip{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:space-between;gap:4px;
+  padding:3px 7px;background:#fff;border:1.5px solid #5d7a8c;border-radius:6px;font-size:12.5px;line-height:1.15;font-weight:600;
+  touch-action:none;user-select:none;cursor:grab}
+.chip .nm{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+.chip .fl{display:flex;flex-direction:column;align-items:center;gap:2px;flex:none;font-size:11px}
+.chip .hasneed{width:8px;height:8px;border-radius:50%;background:var(--accent);display:block}
+.chip.bad{border-color:var(--bad);box-shadow:inset 0 0 0 2px var(--bad)}
+.chip.sel{background:#fff3c4;border-color:#b98a00}
+.chip.rel-with{background:#d9f0e2;border-color:var(--good)}
+.chip.rel-avoid{background:#fbdcd7;border-color:var(--bad)}
+.chip.dragging{opacity:.35}
+.ghost{position:fixed;z-index:50;pointer-events:none;width:108px;height:44px;opacity:.92;box-shadow:0 8px 18px rgba(0,0,0,.3)}
+body.private-off .priv,body.private-off .chip .fl{display:none}
+body.private-off .chip.bad{border-color:#5d7a8c;box-shadow:none}
+body.private-off #selInfo{display:none}
+
+#unseated{min-height:60px;padding:8px;border:2px dashed var(--line);border-radius:8px;display:flex;flex-direction:column;gap:6px}
+#unseated.drop{background:#fff3c4;border-color:#b98a00}
+#unseated .item{display:flex;gap:6px;align-items:center}
+#unseated .chip{height:36px;flex:1}
+#unseated .rm{border:0;background:none;color:var(--muted);font-size:16px;padding:0 4px}
+#unseated .empty{color:var(--muted);font-size:12.5px;text-align:center;padding:8px}
+
+.sum{padding:10px 12px;border-radius:7px;font-weight:700;margin-bottom:10px}
+.sum.ok{background:#e1f3e9;color:#17603a}
+.sum.bad{background:#fbe4e0;color:#8e2a1d}
+.issues{list-style:none;margin:0 0 6px;padding:0}
+.issues li{padding:7px 9px;margin-bottom:5px;border-radius:6px;background:#f5f8fa;border-left:4px solid var(--muted);font-size:13px;line-height:1.4;cursor:pointer}
+.issues li.need,.issues li.avoid{border-left-color:var(--bad);background:#fdf0ee}
+.issues li.unseated,.issues li.ref{border-left-color:var(--warn);background:#fdf5e8}
+.issues li.pref{border-left-color:#8aa0b0}
+.issues li.remind{border-left-color:var(--accent);cursor:default}
+
+#roomTitle{font-size:21px;font-weight:700;margin:0 0 10px}
+#roomTitle:empty{display:none}
+.obj{position:absolute;display:flex;align-items:center;justify-content:center;text-align:center;padding:2px 4px;font-size:12px;font-weight:700;
+  border:2px solid rgba(0,0,0,.35);border-radius:4px;background:#e6e6e6;color:#2a3540;user-select:none;overflow:hidden}
+.obj span{pointer-events:none;overflow:hidden;line-height:1.15;max-height:100%}
+.obj[data-kind=board]{background:#34513f;color:#fff;border-color:#1f3326}
+.obj[data-kind=lab]{background:#c9d3d9;border-color:#7d8f9a}
+.obj[data-kind=sink]{background:#bfe0ee;border-color:#6aa4bf}
+.obj[data-kind=cabinet]{background:#d6c6b0;border-color:#9b8767}
+.obj[data-kind=shelf]{background:#e4d3ba;border-color:#a89068}
+.obj[data-kind=cart]{background:#dcd5ea;border-color:#9487b5}
+body:not(.editing) .obj{pointer-events:none}
+body.editing .obj{cursor:grab;overflow:visible}
+body.editing .obj.sel{outline:3px solid var(--accent);outline-offset:2px}
+.obj .rz{display:none;position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;background:var(--accent);border:2px solid #fff;border-radius:3px;cursor:nwse-resize}
+body.editing .obj.sel .rz{display:block}
+
+.obj[data-kind=window]{background:#cfe6f7;border-color:#5f9cc6;color:#17415c}
+.obj[data-kind=door]{background:#cfe3d4;border-color:#6aa57b;color:#1d4a2c}
+.obj[data-kind=window],.obj[data-kind=door]{padding:0}
+.obj.tall span{writing-mode:vertical-rl}
+.table.unused{opacity:.5}
+.tierrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0}
+.tierrow small{color:var(--muted);margin-left:4px}
+.classfield{display:flex;align-items:center;gap:7px;font-weight:700;font-size:13px}
+.classfield input{width:230px;padding:7px 9px;border:2px solid var(--accent);border-radius:6px;font-weight:600}
+#pastList .item{display:flex;gap:6px;align-items:center;padding:5px 8px;background:#f5f8fa;border-radius:6px;margin-bottom:5px}
+#pastList .pastname{flex:1;display:flex;flex-direction:column;word-break:break-all;font-weight:600;font-size:13px}
+#pastList small{color:var(--muted);font-weight:400}
+#pastList .rm{border:0;background:none;color:var(--muted);font-size:16px}
+select{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;font-weight:600;z-index:99;opacity:0;pointer-events:none;transition:opacity .2s;max-width:80vw}
+.toast.on{opacity:1}
+
+@media (max-width:860px){.app{grid-template-columns:1fr;grid-template-rows:auto 1fr}aside{max-height:46vh;border-right:0;border-bottom:1px solid var(--line)}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+@media print{
+  @page{size:landscape;margin:.5in}
+  body{background:#fff;display:block}
+  header.top,aside,.toolbar,#selInfo,.toast{display:none!important}
+  #roomWrap{overflow:visible;padding:0}
+  #room{border:1px solid #888;background:#fff}
+  .priv,.chip .fl{display:none!important}
+  .chip.bad,.chip.sel,.chip.rel-with,.chip.rel-avoid{background:#fff;border-color:#5d7a8c;box-shadow:none}
+  .seat.off{display:none}
+}
+</style>
+</head>
+<body class="">
+<header class="top">
+  <h1>Seating Chart Builder</h1>
+  <div class="privacy">Runs only in this browser tab. Nothing is uploaded or stored, and this page is blocked from using the network. Student names disappear when you close or refresh the tab.</div>
+</header>
+
+<div class="app">
+<aside>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tabbtn-students" aria-selected="true" data-tab="students">Students</button>
+    <button role="tab" id="tabbtn-room" aria-selected="false" data-tab="room">Room</button>
+    <button role="tab" id="tabbtn-guide" aria-selected="false" data-tab="guide">Guidelines</button>
+    <button role="tab" id="tabbtn-checks" aria-selected="false" data-tab="checks">Checks <span class="badge ok" id="badge">0</span></button>
+  </div>
+
+  <!-- STUDENTS -->
+  <div class="tabpane on" id="pane-students">
+    <h2>Load students</h2>
+    <p class="hint">Load one or more CSV files; files are merged by student name. <strong>Row 1 must be the column headings</strong> and is never read as a student. Recognized headings: Name (or First and Last), Class, Accommodations, Sit with, Keep apart, Teacher notes. Other columns are ignored and never stored.</p>
+    <p class="hint"><strong>Priority:</strong> IEP/504 accommodations first, then Teacher notes, then student requests (Sit with / Keep apart). If a teacher note goes against a student request, the note wins. If a CSV has a Class column, it labels the chart automatically.</p>
+    <div class="row">
+      <button class="btn primary" id="loadBtn">Load CSV file(s)</button>
+      <button class="btn" id="formBtn">Fillable worksheet</button>
+      <button class="btn" id="tplBtn">CSV template</button>
+    </div>
+    <input type="file" id="fileInput" accept=".csv,.tsv,.txt" multiple hidden>
+    <p class="hint">New to this? "Fillable worksheet" is a form you can type into and save as the student file. "CSV template" is for Excel or Sheets.</p>
+    <div class="notice" id="notice"></div>
+
+    <h2>Or type names</h2>
+    <textarea id="namesBox" placeholder="One name per line" aria-label="Student names, one per line"></textarea>
+    <div class="row" style="margin-top:6px"><button class="btn" id="addNamesBtn">Add names</button></div>
+
+    <h2>Not seated (<span id="unseatedCount">0</span>)</h2>
+    <p class="hint">Drag a student onto a seat. Drag a seated student here to remove them from the chart. Double-click a student to pin them in place so Generate won't move them.</p>
+    <div id="unseated"></div>
+    <div class="row" style="margin-top:14px"><button class="btn danger small" id="clearStudentsBtn">Remove all students</button></div>
+  </div>
+
+  <!-- ROOM -->
+  <div class="tabpane" id="pane-room">
+    <h2>Build a grid of tables</h2>
+    <div class="row">
+      <label class="field">Tables across<input type="number" id="gAcross" min="1" max="8" value="3"></label>
+      <label class="field">Tables down<input type="number" id="gDown" min="1" max="6" value="2"></label>
+      <label class="field">Seats across<input type="number" id="gCols" min="1" max="6" value="2"></label>
+      <label class="field">Seats deep<input type="number" id="gRows" min="1" max="6" value="2"></label>
+    </div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="gridBtn">Replace layout with grid</button></div>
+
+    <h2>Add one table</h2>
+    <div class="row">
+      <label class="field">Seats across<input type="number" id="aCols" min="1" max="8" value="2"></label>
+      <label class="field">Seats deep<input type="number" id="aRows" min="1" max="6" value="2"></label>
+      <button class="btn" id="addTableBtn" style="align-self:flex-end">Add table</button>
+    </div>
+
+    <h2>Selected table</h2>
+    <div id="tableEditor"><p class="hint">Click a table's title bar to select it.</p></div>
+
+    <h2>Add a classroom object</h2>
+    <p class="hint">Boards, windows, doors, lab tables, sinks, cabinets and more. They show where students can and can't walk; they don't hold students. Windows and Doors are also used for "near/away from window or door" needs.</p>
+    <div class="row"><label class="field">Type<select id="oKind"></select></label><button class="btn" id="addObjBtn" style="align-self:flex-end">Add object</button></div>
+
+    <h2>Selected object</h2>
+    <div id="objEditor"><p class="hint">Click an object in the chart to select it.</p></div>
+
+    <h2>Tips</h2>
+    <p class="hint">Drag a table by its title bar to move it, and click empty floor to deselect. Drag the Teacher desk marker to match your room, and add Door and Window objects. "Front", "near door" and similar needs are measured from them. Click any seat to mark it unavailable (broken chair, blocked by a cart).</p>
+
+    <h2>Save the layout</h2>
+    <p class="hint">Your room layout contains no student information. It is remembered in this browser automatically, and you can also save it as a file.</p>
+    <div class="row">
+      <button class="btn" id="saveLayoutBtn">Save layout file</button>
+      <button class="btn" id="loadLayoutBtn">Load layout file</button>
+      <button class="btn danger small" id="resetLayoutBtn">Reset</button>
+    </div>
+    <input type="file" id="layoutInput" accept=".json" hidden>
+  </div>
+
+  <!-- GUIDELINES -->
+  <div class="tabpane" id="pane-guide">
+    <h2>Which tables to fill first</h2>
+    <p class="hint">Tier 1 tables are filled before Tier 2, then Tier 3. "Not used" tables stay empty. Example: tables 1, 3 and 5 in Tier 1 and tables 2 and 4 in Tier 2. Accommodations still win if they need a seat in a later tier.</p>
+    <div id="tierList"></div>
+    <p class="hint" id="seatSummary"></p>
+
+    <h2>Table size</h2>
+    <div class="row">
+      <label class="field">Fewest students at a used table<input type="number" id="gMin" min="0" max="20" placeholder="no minimum"></label>
+      <label class="field">Most students at a table<input type="number" id="gMax" min="0" max="20" placeholder="no maximum"></label>
+    </div>
+    <p class="hint">Example: a minimum of 3 means no table is used with only 1 or 2 students.</p>
+
+    <h2>How to fill tables</h2>
+    <select id="gMode" aria-label="How to fill tables">
+      <option value="free">No preference</option>
+      <option value="pack">Fill each table before starting the next (use fewer tables)</option>
+      <option value="even">Spread students evenly across the tables</option>
+    </select>
+
+    <h2>Past seating charts</h2>
+    <p class="hint">Load a chart you exported earlier (Export CSV). The builder will move students to different seats and tables and give them new table mates. You can load several. Names are matched to your current students.</p>
+    <div class="row">
+      <button class="btn primary" id="pastBtn">Load past chart(s)</button>
+      <button class="btn" id="pastNowBtn">Use current chart as past chart</button>
+    </div>
+    <input type="file" id="pastInput" accept=".csv,.tsv,.txt" multiple hidden>
+    <div class="notice" id="pastNotice"></div>
+    <div id="pastList" style="margin-top:10px"></div>
+    <label class="field" style="margin-top:8px">How much to mix up
+      <select id="gVariety"><option value="off">Off (ignore past charts)</option><option value="gentle">Gentle (prefer new seats and table mates)</option><option value="strong">Strong (change as much as possible)</option></select>
+    </label>
+    <p class="hint">Mixing up never overrides IEP/504 accommodations or teacher notes.</p>
+    <p class="hint">Guidelines are saved with your room layout in this browser. They contain no student information.</p>
+  </div>
+
+  <!-- CHECKS -->
+  <div class="tabpane" id="pane-checks">
+    <div id="checksBody"></div>
+  </div>
+</aside>
+
+<main>
+  <div class="toolbar">
+    <label class="classfield" for="className">Class <input id="className" type="text" placeholder="e.g. Period 3 Biology" autocomplete="off"></label>
+    <button class="btn primary" id="genBtn">Generate chart</button>
+    <button class="btn" id="clearBtn">Clear seats</button>
+    <button class="btn" id="exportBtn">Export CSV</button>
+    <button class="btn" id="printBtn">Print</button>
+    <span class="sp"></span>
+    <label class="chk"><input type="checkbox" id="teacherView" checked> Teacher view (show flags)</label>
+  </div>
+  <div id="selInfo" class="empty">Click a student to see their needs and preferences. Drag to swap or move seats.</div>
+  <div id="roomWrap"><h2 id="roomTitle"></h2><div id="room"></div></div>
+</main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* ---------- constants ---------- */
+const SW=108, SH=44, SG=6, PAD=8, HEAD=22, SNAP=10;
+const MARK={teacher:{w:220,h:40,label:'Teacher desk (front)',cls:'m-teacher'}};
+const OBJ_KINDS={board:{label:'Board',w:320,h:20},window:{label:'Window',w:120,h:24},door:{label:'Door',w:80,h:24},lab:{label:'Lab table',w:200,h:60},sink:{label:'Sink',w:60,h:40},cabinet:{label:'Cabinet',w:120,h:40},shelf:{label:'Bookshelf',w:160,h:30},cart:{label:'Cart',w:70,h:50},custom:{label:'Object',w:100,h:60}};
+const TAGS={front:'Front of room',near_teacher:'Near teacher',back:'Back of room',near_door:'Near door',away_door:'Away from door',near_window:'Near window',away_window:'Away from window',aisle:'Aisle / accessible seat'};
+const OPPOSITE={front:['back'],near_teacher:['back'],back:['front','near_teacher'],near_door:['away_door'],away_door:['near_door'],near_window:['away_window'],away_window:['near_window']};
+/* [base penalty, extra penalty by how far off]. Accommodations > teacher notes > student requests. */
+const T_ACC=[1000,500], T_TEACH=[400,200], T_PREF=[40,100];
+const VARIETY={off:0,gentle:.6,strong:1.6};
+const LAYOUT_KEY='seating-layout-v3', OLD_KEY='seating-layout-v2';
+
+/* ---------- state ---------- */
+let uid=1; const nid=p=>p+(uid++);
+const defaultGuide=()=>({tier:{},min:0,max:0,mode:'free',variety:'gentle'});
+const state={tables:[],objects:[],markers:{},disabled:new Set(),students:[],assign:{},history:[],guide:defaultGuide(),mode:'seat',selTable:null,selObj:null,selStudent:null};
+let lastAnalysis=null;
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const snap=v=>Math.max(0,Math.round(v/SNAP)*SNAP);
+const snapSize=v=>Math.max(20,Math.round(v/SNAP)*SNAP);
+const norm=s=>String(s).toLowerCase().replace(/[.,]/g,' ').replace(/\s+/g,' ').trim();
+const normT=s=>String(s).toLowerCase().replace(/[^\p{L}\p{N}'\- ]/gu,' ').replace(/\s+/g,' ').trim();
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),4200)}
+const tierOf=id=>{const v=state.guide.tier[id];return v===undefined?1:v};
+
+/* ---------- layout ---------- */
+const tableW=t=>t.cols*SW+(t.cols-1)*SG+2*PAD;
+const tableH=t=>HEAD+t.rows*SH+(t.rows-1)*SG+2*PAD;
+
+function buildGrid(across,down,cols,rows){
+  state.tables=[];state.disabled=new Set();state.assign={};state.selTable=null;state.guide.tier={};
+  const tw=cols*SW+(cols-1)*SG+2*PAD, th=HEAD+rows*SH+(rows-1)*SG+2*PAD, gx=70, gy=50, x0=60, y0=110;
+  let n=1;
+  for(let r=0;r<down;r++)for(let c=0;c<across;c++){
+    state.tables.push({id:nid('t'),label:'Table '+(n++),x:x0+c*(tw+gx),y:y0+r*(th+gy),cols,rows});
+  }
+  const totalW=across*tw+(across-1)*gx, totalH=down*th+(down-1)*gy;
+  state.markers={teacher:{x:snap(x0+totalW/2-MARK.teacher.w/2),y:30}};
+  state._starter={mid:x0+totalW/2,doorY:snap(y0+totalH+30),winX:snap(x0+totalW+50),winY:y0};
+}
+function mkObj(kind,x,y,w,h){const k=OBJ_KINDS[kind];return{id:nid('o'),kind,label:k.label,x,y,w:w||k.w,h:h||k.h}}
+function starterObjects(){
+  const st=state._starter||{mid:480,doorY:560,winX:960,winY:110};
+  state.objects=[mkObj('board',snap(st.mid-160),4),mkObj('door',10,st.doorY),mkObj('window',st.winX,st.winY,20,140)];
+}
+function layoutObject(){return{v:3,tables:state.tables,objects:state.objects,markers:state.markers,disabled:[...state.disabled],guide:state.guide}}
+function applyLayout(o){
+  state.tables=o.tables.map(t=>({id:t.id||nid('t'),label:String(t.label||'Table'),x:+t.x||0,y:+t.y||0,cols:Math.max(1,Math.min(8,+t.cols||1)),rows:Math.max(1,Math.min(8,+t.rows||1))}));
+  const objs=(o.objects||[]);
+  const nums=[...state.tables,...objs].map(t=>parseInt(String(t.id).replace(/\D/g,''))||0);
+  uid=Math.max(uid,...nums)+1;
+  state.objects=objs.map(b=>({id:b.id||nid('o'),kind:OBJ_KINDS[b.kind]?b.kind:'custom',label:String(b.label||''),x:+b.x||0,y:+b.y||0,w:snapSize(+b.w||100),h:snapSize(+b.h||60)}));
+  const mk=o.markers||{};
+  if((o.v||1)<3)for(const k of ['door','window'])if(mk[k])state.objects.push(mkObj(k,+mk[k].x||0,+mk[k].y||0)); // older layouts: markers became objects
+  state.markers={teacher:mk.teacher||{x:380,y:30}};
+  state.disabled=new Set(o.disabled||[]);state.selTable=null;state.selObj=null;
+  state.guide=Object.assign(defaultGuide(),o.guide||{});state.guide.tier=state.guide.tier||{};
+  prune();
+}
+function saveLayout(){try{localStorage.setItem(LAYOUT_KEY,JSON.stringify(layoutObject()))}catch(e){}}
+function loadSavedLayout(){
+  try{for(const key of [LAYOUT_KEY,OLD_KEY]){const raw=localStorage.getItem(key);if(raw){const o=JSON.parse(raw);if(o&&o.tables&&o.markers){applyLayout(o);return true}}}}catch(e){}
+  return false;
+}
+
+/* ---------- seats ---------- */
+const rectDist=(px,py,o)=>Math.hypot(Math.max(o.x-px,0,px-(o.x+o.w)),Math.max(o.y-py,0,py-(o.y+o.h)));
+function getSeats(){
+  const seats=[];
+  for(const t of state.tables){
+    const others=state.tables.filter(o=>o!==t), tw=tableW(t), th=tableH(t);
+    const leftClosed=others.some(o=>o.y<t.y+th&&o.y+tableH(o)>t.y&&o.x+tableW(o)<=t.x&&t.x-(o.x+tableW(o))<50);
+    const rightClosed=others.some(o=>o.y<t.y+th&&o.y+tableH(o)>t.y&&o.x>=t.x+tw&&o.x-(t.x+tw)<50);
+    for(let r=0;r<t.rows;r++)for(let c=0;c<t.cols;c++){
+      const key=`${t.id}:${r}:${c}`;
+      seats.push({key,tid:t.id,tlabel:t.label,tier:tierOf(t.id),r,c,
+        lx:PAD+c*(SW+SG),ly:HEAD+PAD+r*(SH+SG),
+        x:t.x+PAD+c*(SW+SG)+SW/2,y:t.y+HEAD+PAD+r*(SH+SG)+SH/2,
+        disabled:state.disabled.has(key),
+        aisle:(c===0&&!leftClosed)||(c===t.cols-1&&!rightClosed),
+        pT:.5,pD:null,pW:null});
+    }
+  }
+  const en=seats.filter(s=>!s.disabled&&s.tier!==0);
+  const tm=state.markers.teacher, tc={x:tm.x+MARK.teacher.w/2,y:tm.y+MARK.teacher.h/2};
+  const doors=state.objects.filter(o=>o.kind==='door'), wins=state.objects.filter(o=>o.kind==='window');
+  const setPct=(prop,fn)=>{
+    const sorted=en.slice().sort((a,b)=>fn(a)-fn(b));
+    sorted.forEach((s,i)=>{s[prop]=sorted.length>1?i/(sorted.length-1):0});
+  };
+  setPct('pT',s=>Math.hypot(s.x-tc.x,s.y-tc.y));
+  if(doors.length)setPct('pD',s=>Math.min(...doors.map(o=>rectDist(s.x,s.y,o))));
+  if(wins.length)setPct('pW',s=>Math.min(...wins.map(o=>rectDist(s.x,s.y,o))));
+  return seats;
+}
+function prune(){
+  const valid=new Set(getSeats().filter(s=>!s.disabled).map(s=>s.key));
+  for(const k of Object.keys(state.assign))if(!valid.has(k))delete state.assign[k];
+}
+
+/* ---------- seat rules ---------- */
+function excess(tag,s){switch(tag){
+  case 'front':return s.pT-.34; case 'near_teacher':return s.pT-.2; case 'back':return .66-s.pT;
+  case 'near_door':return s.pD==null?0:s.pD-.2; case 'away_door':return s.pD==null?0:.5-s.pD;
+  case 'near_window':return s.pW==null?0:s.pW-.25; case 'away_window':return s.pW==null?0:.5-s.pW;
+  case 'aisle':return s.aisle?0:.6;} return 0}
+const tagOK=(t,s)=>excess(t,s)<=0;
+const tagCost=(t,s,tier)=>{const e=excess(t,s);return e<=0?0:tier[0]+tier[1]*e};
+function tagFor(text){
+  const k=String(text).toLowerCase().replace(/[^a-z0-9]/g,'');
+  if(!k)return null;
+  if(/away|far|from/.test(k)&&/door|exit|hall/.test(k)&&!/^near/.test(k))return 'away_door';
+  if(/away|far/.test(k)&&/window/.test(k))return 'away_window';
+  if(/(near|close|by|next)/.test(k)&&/(door|exit)/.test(k))return 'near_door';
+  if(/(near|close|by|next)/.test(k)&&/window/.test(k))return 'near_window';
+  if(/(near|close|by|next)/.test(k)&&/teacher|instructor|desk/.test(k))return 'near_teacher';
+  if(/front|preferential/.test(k))return 'front';
+  if(/^back|backofroom|backrow|intheback|rear/.test(k))return 'back';
+  if(/aisle|accessible|wheelchair|mobility|walker|crutch/.test(k))return 'aisle';
+  return null;
+}
+
+/* ---------- students ---------- */
+function nameIndex(){
+  const exact=new Map(), first=new Map();
+  for(const s of state.students){
+    exact.set(norm(s.name),s);
+    const f=norm(s.name).split(' ')[0];
+    first.set(f,first.has(f)?null:s);
+  }
+  return n=>{const k=norm(n);return exact.get(k)||first.get(k)||null};
+}
+function findOrAdd(name){
+  const k=norm(name);
+  let s=state.students.find(x=>norm(x.name)===k);
+  if(!s){s={id:nid('s'),name:name.trim(),tags:[],extra:[],prefTags:[],sitWith:[],avoid:[],tNotes:[],cls:'',pinned:false};state.students.push(s);s._new=true}
+  return s;
+}
+const keyOfStudent=sid=>Object.keys(state.assign).find(k=>state.assign[k]===sid)||null;
+
+/* Priority: 1) IEP/504 accommodations  2) teacher notes  3) student requests */
+const AVOID_RE=/\b(apart|separat\w*|away from|avoid\w*|split|conflict\w*|not|never|no|don'?t|doesn'?t|can'?t|cannot|won'?t|shouldn'?t)\b/;
+const WITH_RE=/\b(sit(ting)? (with|near|next to|beside)|pair\w*|partner\w*|next to|beside|together|buddy|near|with)\b/;
+function buildModel(){
+  const studs=state.students, find=nameIndex(), M=new Map(), firstCount={};
+  studs.forEach(s=>{const f=normT(s.name).split(' ')[0];firstCount[f]=(firstCount[f]||0)+1});
+  const mentioned=(tok,self)=>{
+    const t=' '+normT(tok)+' ', out=[];
+    for(const o of studs){if(o===self)continue;
+      const full=normT(o.name), fn=full.split(' ')[0];
+      if(t.includes(' '+full+' '))out.push(o);else if(firstCount[fn]===1&&t.includes(' '+fn+' '))out.push(o)}
+    return out;
+  };
+  const pk=(a,b)=>[a.id,b.id].sort().join('|');
+  for(const s of studs){
+    const r={acc:[...s.tags],teach:[],pref:[...s.prefTags],withT:[],avoidT:[],withS:[],avoidS:[],text:[],reads:[],overrides:[],missing:[]};
+    for(const tok of s.tNotes){
+      const named=mentioned(tok,s);
+      if(named.length){
+        const low=normT(tok), list=named.map(o=>o.name).join(', ');
+        if(AVOID_RE.test(low)){named.forEach(o=>r.avoidT.push(o));r.reads.push(`"${tok}" → keep apart from ${list}`)}
+        else if(WITH_RE.test(low)){named.forEach(o=>r.withT.push(o));r.reads.push(`"${tok}" → sit with ${list}`)}
+        else{r.text.push(tok);r.reads.push(`"${tok}" → reminder only (couldn't tell if this means sit with or keep apart)`)}
+      } else {
+        const tg=tagFor(tok);
+        if(tg){r.teach.push(tg);r.reads.push(`"${tok}" → ${TAGS[tg]}`)}
+        else{r.text.push(tok);r.reads.push(`"${tok}" → reminder only (no seating rule recognized)`)}
+      }
+    }
+    for(const n of s.sitWith){const o=find(n);if(!o)r.missing.push(n);else if(o!==s)r.withS.push(o)}
+    for(const n of s.avoid){const o=find(n);if(!o)r.missing.push(n);else if(o!==s)r.avoidS.push(o)}
+    M.set(s.id,r);
+  }
+  const tAvoid=new Set(), tWith=new Set();
+  for(const s of studs){const r=M.get(s.id);r.avoidT.forEach(o=>tAvoid.add(pk(s,o)));r.withT.forEach(o=>tWith.add(pk(s,o)))}
+  for(const s of studs){
+    const r=M.get(s.id);
+    r.teach=r.teach.filter(t=>{
+      const clash=r.acc.find(a=>(OPPOSITE[t]||[]).includes(a));
+      if(clash){r.overrides.push(`${s.name}: teacher note "${TAGS[t]}" conflicts with the accommodation "${TAGS[clash]}". The accommodation is followed.`);return false}
+      return !r.acc.includes(t);
+    });
+    r.pref=r.pref.filter(t=>{
+      const clash=[...r.teach,...r.acc].find(a=>(OPPOSITE[t]||[]).includes(a));
+      if(clash){r.overrides.push(`${s.name}'s request for "${TAGS[t]}" was set aside (${TAGS[clash]} takes priority).`);return false}
+      return !r.acc.includes(t)&&!r.teach.includes(t);
+    });
+    r.withS=r.withS.filter(o=>{if(tAvoid.has(pk(s,o))){r.overrides.push(`${s.name}'s wish to sit with ${o.name} was set aside (teacher notes say keep apart).`);return false}return true});
+    r.avoidS=r.avoidS.filter(o=>{if(tWith.has(pk(s,o))){r.overrides.push(`${s.name}'s request to be apart from ${o.name} was set aside (teacher notes say sit together).`);return false}return true});
+  }
+  return M;
+}
+
+/* ---------- CSV ---------- */
+function parseCSV(text){
+  text=text.replace(/^\uFEFF/,'');
+  const first=text.split(/\r?\n/)[0]||'';
+  const d=(first.split('\t').length>first.split(',').length)?'\t':',';
+  const rows=[];let row=[],cur='',q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i++} else q=false } else cur+=ch }
+    else if(ch==='"')q=true;
+    else if(ch===d){row.push(cur);cur=''}
+    else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n')i++; row.push(cur);cur='';rows.push(row);row=[] }
+    else cur+=ch;
+  }
+  if(cur!==''||row.length){row.push(cur);rows.push(row)}
+  return rows.filter(r=>r.some(c=>c.trim()!==''));
+}
+function colRole(h){
+  const k=String(h).toLowerCase().replace(/[^a-z0-9]/g,'');
+  if(/teachernote|noteforteacher|teachercomment|teacherrequest|staffnote|^notes?$|teacherinput/.test(k))return 'tnotes';
+  if(/avoid|separat|apart|notwith|nottosit|sitaway|conflict/.test(k))return 'avoid';
+  if(/sitwith|sitnear|prefer|request|friend|partner|buddy|workwith|worksbest/.test(k))return 'sitwith';
+  if(/accom|need|iep|504|support|seating|plan/.test(k))return 'needs';
+  if(/^(class|classname|period|course|section|hour|subject)/.test(k))return 'class';
+  if(/^(first|given)/.test(k))return 'first';
+  if(/^(last|surname|family)/.test(k))return 'last';
+  if(/name|student/.test(k))return 'name';
+  return null;
+}
+/* Row 1 is ALWAYS the column headings. It is never read as a student. */
+function mergeCSV(text){
+  const rows=parseCSV(text); if(!rows.length)return{err:'The file is empty.'};
+  const heads=rows[0].map(h=>h.trim()), roles=heads.map(colRole);
+  if(!roles.some(r=>r==='name'||r==='first'))
+    return{err:`No Name column found in row 1. Row 1 must hold the column headings (for example Name, Accommodations). Headings found: ${heads.filter(Boolean).join(', ')||'none'}.`};
+  let added=0,updated=0;const classes=[];
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i], get=role=>{const j=roles.indexOf(role);return j<0?'':(r[j]||'').trim()};
+    const name=(get('name')||[get('first'),get('last')].filter(Boolean).join(' ')).trim();
+    if(!name)continue;
+    const s=findOrAdd(name); if(s._new){added++;delete s._new}else updated++;
+    const cls=get('class'); if(cls){s.cls=cls;classes.push(cls)}
+    for(const tok of get('needs').split(/[;|,\n]/).map(x=>x.trim()).filter(Boolean)){
+      const tag=tagFor(tok);
+      if(tag){if(!s.tags.includes(tag))s.tags.push(tag)}
+      else if(!s.extra.includes(tok))s.extra.push(tok);
+    }
+    for(const tok of get('sitwith').split(/[;|\n]/).map(x=>x.trim()).filter(Boolean)){
+      const tag=tagFor(tok);
+      if(tag){if(!s.prefTags.includes(tag))s.prefTags.push(tag)}
+      else if(!s.sitWith.some(x=>norm(x)===norm(tok)))s.sitWith.push(tok);
+    }
+    for(const tok of get('avoid').split(/[;|\n]/).map(x=>x.trim()).filter(Boolean))
+      if(!s.avoid.some(x=>norm(x)===norm(tok)))s.avoid.push(tok);
+    for(const tok of get('tnotes').split(/[;|\n]/).map(x=>x.trim()).filter(Boolean))
+      if(!s.tNotes.includes(tok))s.tNotes.push(tok);
+  }
+  return{added,updated,classes};
+}
+/* A past chart is the CSV this app exports (Table + Student columns). */
+function parsePast(text,fname){
+  const rows=parseCSV(text); if(rows.length<2)return{err:'No rows found.'};
+  const heads=rows[0].map(h=>h.trim().toLowerCase().replace(/[^a-z0-9]/g,''));
+  const role=k=>/row/.test(k)?'row':/col/.test(k)?'col':/^(table|group|pod)/.test(k)?'table':/^(class|period|course)/.test(k)?'class':/student|name/.test(k)?'name':null;
+  const roles=heads.map(role), at=r=>roles.indexOf(r);
+  if(at('table')<0||at('name')<0)return{err:'A past chart needs "Table" and "Student" columns. The Export CSV button in this app creates the right format.'};
+  const out=[], byName=new Map();
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i], name=(r[at('name')]||'').trim(), table=(r[at('table')]||'').trim();
+    if(!name||!table||table.startsWith('('))continue;
+    const rec={name,tl:table,tn:norm(table),r:parseInt(r[at('row')])||0,c:parseInt(r[at('col')])||0};
+    out.push(rec);byName.set(norm(name),rec);
+  }
+  if(!out.length)return{err:'No seated students were found in this file.'};
+  const ci=at('class');
+  return{h:{file:fname,cls:ci>=0?(rows[1][ci]||'').trim():'',rows:out,byName}};
+}
+function csvEsc(v){v=String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function download(name,text,type){
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
+function updateTitle(){$('#roomTitle').textContent=$('#className').value.trim()}
+
+/* ---------- analysis ---------- */
+function analyze(){
+  const seats=getSeats(), byKey=new Map(seats.map(s=>[s.key,s])), seatOf={};
+  for(const [k,sid] of Object.entries(state.assign))if(byKey.has(k)&&!byKey.get(k).disabled)seatOf[sid]=byKey.get(k);
+  const M=buildModel(), G=state.guide, issues=[], reminders=[], flags={}, overrides=[], noteReads=[], seenA=new Set(), tagsUsed=new Set();
+  const flag=(id,f)=>{(flags[id]=flags[id]||{})[f]=true};
+  const close=(x,y)=>x.tid===y.tid||Math.hypot(x.x-y.x,x.y-y.y)<150;
+  const pk=(a,b)=>[a.id,b.id].sort().join('|');
+  const counts={};
+  for(const s of state.students){
+    const r=M.get(s.id), seat=seatOf[s.id];
+    r.overrides.forEach(t=>overrides.push(t)); r.reads.forEach(t=>noteReads.push(`${s.name}: ${t}`));
+    r.text.forEach(t=>reminders.push(`${s.name} (teacher note): ${t}`));
+    if(s.extra.length)reminders.push(`${s.name}: ${s.extra.join('; ')}`);
+    [...r.acc,...r.teach].forEach(t=>tagsUsed.add(t));
+    r.missing.forEach(n=>issues.push({type:'ref',sid:s.id,text:`${s.name} lists "${n}", who is not in the student list.`}));
+    if(!seat){issues.push({type:'unseated',sid:s.id,text:`${s.name} is not seated.`});continue}
+    counts[seat.tid]=(counts[seat.tid]||0)+1;
+    for(const t of r.acc)if(!tagOK(t,seat)){flag(s.id,'need');issues.push({type:'need',sid:s.id,text:`${s.name}: "${TAGS[t]}" is not met (${seat.tlabel}).`})}
+    for(const t of r.teach)if(!tagOK(t,seat)){flag(s.id,'need');issues.push({type:'tnote',sid:s.id,text:`${s.name}: teacher note "${TAGS[t]}" is not met (${seat.tlabel}).`})}
+    for(const t of r.pref)if(!tagOK(t,seat))issues.push({type:'pref',sid:s.id,text:`${s.name} asked for "${TAGS[t]}" (not met).`});
+    for(const o of r.avoidT){const so=seatOf[o.id];if(so&&close(seat,so)){const k=pk(s,o);if(!seenA.has(k)){seenA.add(k);flag(s.id,'avoid');flag(o.id,'avoid');
+      issues.push({type:'tavoid',sid:s.id,text:`${s.name} and ${o.name} are seated close together (teacher note: keep apart).`})}}}
+    for(const o of r.avoidS){const so=seatOf[o.id];if(so&&close(seat,so)){const k=pk(s,o);if(!seenA.has(k)){seenA.add(k);flag(s.id,'avoid');flag(o.id,'avoid');
+      issues.push({type:'avoid',sid:s.id,text:`${s.name} and ${o.name} are seated close together (keep-apart request).`})}}}
+    for(const o of r.withT){const so=seatOf[o.id];if(so&&so.tid!==seat.tid)issues.push({type:'tnote',sid:s.id,text:`${s.name}: teacher note says sit with ${o.name}, but they are at different tables.`})}
+    for(const o of r.withS){const so=seatOf[o.id];if(so&&so.tid!==seat.tid)issues.push({type:'pref',sid:s.id,text:`${s.name} would like to sit with ${o.name} (different tables).`})}
+  }
+  // room setup warnings
+  const hasObj=k=>state.objects.some(o=>o.kind===k);
+  if((tagsUsed.has('near_door')||tagsUsed.has('away_door'))&&!hasObj('door'))issues.push({type:'setup',text:'Some students have a near/away-from-door need, but no Door has been placed. Add one in the Room tab.'});
+  if((tagsUsed.has('near_window')||tagsUsed.has('away_window'))&&!hasObj('window'))issues.push({type:'setup',text:'Some students have a near/away-from-window need, but no Window has been placed. Add one in the Room tab.'});
+  // seating guidelines
+  const capOf=t=>seats.filter(s=>s.tid===t.id&&!s.disabled).length;
+  for(const t of state.tables){
+    const c=counts[t.id]||0, tier=tierOf(t.id);
+    if(tier===0&&c)issues.push({type:'guide',text:`${t.label} is marked "Not used" but has ${c} student(s).`});
+    if(tier!==0&&G.min&&c>0&&c<G.min)issues.push({type:'guide',text:`${t.label} has ${c} student(s); your minimum is ${G.min}.`});
+    if(G.max&&c>G.max)issues.push({type:'guide',text:`${t.label} has ${c} student(s); your maximum is ${G.max}.`});
+  }
+  const tiers=[...new Set(state.tables.map(t=>tierOf(t.id)).filter(v=>v>0))].sort();
+  for(const k of tiers){
+    const open=state.tables.filter(t=>tierOf(t.id)===k&&(counts[t.id]||0)<capOf(t));
+    const laterUsed=state.tables.some(t=>tierOf(t.id)>k&&(counts[t.id]||0)>0);
+    if(open.length&&laterUsed)issues.push({type:'tier',text:`Tier ${k} table(s) with open seats: ${open.map(t=>t.label).join(', ')}, while a later tier is in use.`});
+  }
+  // comparison with past charts
+  let variety=null;
+  if(state.history.length){
+    const pairs=new Set(), pairNames=[]; let moved=0,total=0;
+    state.history.forEach(h=>{
+      const groups=new Map();
+      for(const s of state.students){const rec=h.byName.get(norm(s.name)),seat=seatOf[s.id];if(!rec||!seat)continue;
+        if(!groups.has(rec.tn))groups.set(rec.tn,[]);groups.get(rec.tn).push({s,seat})}
+      for(const g of groups.values())for(let i=0;i<g.length;i++)for(let j=i+1;j<g.length;j++)
+        if(g[i].seat.tid===g[j].seat.tid){const k=pk(g[i].s,g[j].s);if(!pairs.has(k)){pairs.add(k);pairNames.push(`${g[i].s.name} & ${g[j].s.name}`)}}
+    });
+    const last=state.history[state.history.length-1];
+    for(const s of state.students){const rec=last.byName.get(norm(s.name)),seat=seatOf[s.id];if(rec&&seat){total++;if(norm(seat.tlabel)!==rec.tn)moved++}}
+    variety={moved,total,pairNames};
+  }
+  const order={need:0,tavoid:1,tnote:2,avoid:3,guide:4,setup:4,unseated:5,ref:6,pref:7,tier:8};
+  issues.sort((a,b)=>order[a.type]-order[b.type]);
+  return{issues,reminders,flags,seatOf,seats,overrides,noteReads,variety};
+}
+const ATTN=['need','tavoid','tnote','avoid','guide','setup'];
+
+/* ---------- generator (simulated annealing; runs on this computer) ---------- */
+function generate(){
+  const seats=getSeats().filter(s=>!s.disabled&&s.tier!==0), studs=state.students, G=state.guide;
+  if(!studs.length){toast('Add students first.');return}
+  if(!seats.length){toast('No usable seats. Check your tables in the Room and Guidelines tabs.');return}
+  const idx=new Map(seats.map((s,i)=>[s.key,i]));
+  const seatOf0=studs.map(()=>-1), occ0=Array(seats.length).fill(-1), movable=[], pinnedSeat=Array(seats.length).fill(false);
+  studs.forEach((st,i)=>{
+    const k=keyOfStudent(st.id);
+    if(st.pinned&&k&&idx.has(k)){seatOf0[i]=idx.get(k);occ0[idx.get(k)]=i;pinnedSeat[idx.get(k)]=true}else movable.push(i);
+  });
+  const swappable=seats.map((_,i)=>i).filter(i=>!pinnedSeat[i]);
+  if(!movable.length||!swappable.length){toast('Everyone is pinned, or there are no free seats.');return}
+  const M=buildModel(), mult=VARIETY[G.variety]||0;
+  const need=studs.map(st=>{const r=M.get(st.id);
+    return seats.map(s=>r.acc.reduce((a,t)=>a+tagCost(t,s,T_ACC),0)+r.teach.reduce((a,t)=>a+tagCost(t,s,T_TEACH),0)+r.pref.reduce((a,t)=>a+tagCost(t,s,T_PREF),0)+(s.tier-1)*120)});
+  const D=seats.map(a=>seats.map(b=>Math.hypot(a.x-b.x,a.y-b.y)));
+  const same=seats.map(a=>seats.map(b=>a.tid===b.tid));
+  const ix=o=>studs.indexOf(o), withR=[], avoR=[], seen=new Set(), tWithPairs=new Set();
+  const addAvoid=(i,j,a,b)=>{const k=Math.min(i,j)+'|'+Math.max(i,j);if(!seen.has(k)){seen.add(k);avoR.push([i,j,a,b])}};
+  studs.forEach((st,i)=>{const r=M.get(st.id);
+    r.withT.forEach(o=>{withR.push([i,ix(o),150,4]);tWithPairs.add(Math.min(i,ix(o))+'|'+Math.max(i,ix(o)))});
+    r.avoidT.forEach(o=>addAvoid(i,ix(o),600,350));
+  });
+  studs.forEach((st,i)=>{const r=M.get(st.id);
+    r.withS.forEach(o=>withR.push([i,ix(o),20,8]));
+    r.avoidS.forEach(o=>addAvoid(i,ix(o),250,120));
+  });
+  // variety: discourage repeating past seats, tables, and table mates
+  const prevPairs=new Map(); let matched=0;
+  if(mult>0)state.history.forEach(h=>{
+    const groups=new Map();
+    studs.forEach((st,i)=>{
+      const rec=h.byName.get(norm(st.name)); if(!rec)return;
+      if(!groups.has(rec.tn))groups.set(rec.tn,[]);groups.get(rec.tn).push(i);
+      const old=seats.find(s=>norm(s.tlabel)===rec.tn&&s.r+1===rec.r&&s.c+1===rec.c);
+      seats.forEach((s,si)=>{
+        if(norm(s.tlabel)===rec.tn){need[i][si]+=30*mult;if(old&&old===s)need[i][si]+=40*mult}
+        if(old)need[i][si]+=40*mult*(1-Math.min(Math.hypot(s.x-old.x,s.y-old.y),400)/400);
+      });
+    });
+    for(const g of groups.values())for(let a=0;a<g.length;a++)for(let b=a+1;b<g.length;b++){
+      const k=Math.min(g[a],g[b])+'|'+Math.max(g[a],g[b]); if(tWithPairs.has(k))continue;
+      prevPairs.set(k,(prevPairs.get(k)||0)+70*mult);
+    }
+  });
+  studs.forEach(st=>{if(state.history.some(h=>h.byName.has(norm(st.name))))matched++});
+  const prevR=[...prevPairs].map(([k,w])=>{const [a,b]=k.split('|').map(Number);return[a,b,w]});
+  // guidelines: table sizes and fill style
+  const tidList=[...new Set(seats.map(s=>s.tid))], tIdx=new Map(tidList.map((t,i)=>[t,i])), tix=seats.map(s=>tIdx.get(s.tid));
+  const nT=tidList.length, capT=tidList.map(t=>seats.filter(s=>s.tid===t).length), cnt=new Array(nT).fill(0);
+  const tierT=tidList.map(t=>tierOf(t)), minTier=Math.min(...tierT), evenIdx=tierT.map((v,i)=>v===minTier?i:-1).filter(i=>i>=0);
+  function guideCost(seatOf){
+    cnt.fill(0);let total=0;
+    for(let i=0;i<studs.length;i++){const s=seatOf[i];if(s>=0){cnt[tix[s]]++;total++}}
+    let c=0,used=0;
+    for(let t=0;t<nT;t++){const n=cnt[t];
+      if(n>0){used++;if(G.min&&n<G.min)c+=150*(G.min-n)}
+      if(G.max&&n>G.max)c+=150*(n-G.max)}
+    if(G.mode==='pack')c+=used*60;
+    else if(G.mode==='even'&&evenIdx.length){const ideal=total/evenIdx.length;for(const t of evenIdx){const d=cnt[t]-Math.min(capT[t],ideal);c+=15*d*d}}
+    return c;
+  }
+  const useGuide=!!(G.min||G.max||G.mode!=='free');
+  function cost(seatOf){
+    let c=0;
+    for(let i=0;i<studs.length;i++){const s=seatOf[i];if(s>=0)c+=need[i][s]}
+    for(const [a,b,base,div] of withR){const x=seatOf[a],y=seatOf[b];if(x>=0&&y>=0&&!same[x][y])c+=base+D[x][y]/div}
+    for(const [a,b,sm,nr] of avoR){const x=seatOf[a],y=seatOf[b];if(x>=0&&y>=0){if(same[x][y])c+=sm;else if(D[x][y]<150)c+=nr}}
+    for(const [a,b,w] of prevR){const x=seatOf[a],y=seatOf[b];if(x>=0&&y>=0&&same[x][y])c+=w}
+    if(useGuide)c+=guideCost(seatOf);
+    return c;
+  }
+  let best=null,bestCost=Infinity;
+  const ITER=40000,RESTARTS=4;
+  for(let rs=0;rs<RESTARTS;rs++){
+    const seatOf=seatOf0.slice(), occ=occ0.slice();
+    const free=shuffle(swappable.filter(i=>occ[i]<0));
+    shuffle(movable.slice()).forEach(i=>{const s=free.pop();if(s!==undefined){seatOf[i]=s;occ[s]=i}});
+    let cur=cost(seatOf),bc=cur,bs=seatOf.slice();
+    for(let it=0;it<ITER;it++){
+      const T=300*Math.pow(0.5/300,it/ITER);
+      const a=movable[Math.floor(Math.random()*movable.length)];
+      const t=swappable[Math.floor(Math.random()*swappable.length)];
+      const sa=seatOf[a]; if(t===sa)continue;
+      const b=occ[t];
+      occ[t]=a;seatOf[a]=t;if(sa>=0)occ[sa]=b;if(b>=0)seatOf[b]=sa;
+      const nc=cost(seatOf),d=nc-cur;
+      if(d<=0||Math.random()<Math.exp(-d/T)){cur=nc;if(cur<bc){bc=cur;bs=seatOf.slice()}}
+      else{occ[t]=b;if(b>=0)seatOf[b]=t;seatOf[a]=sa;if(sa>=0)occ[sa]=a}
+    }
+    if(bc<bestCost){bestCost=bc;best=bs}
+  }
+  state.assign={};
+  best.forEach((s,i)=>{if(s>=0)state.assign[seats[s].key]=studs[i].id});
+  renderAll();
+  const bad=lastAnalysis.issues.filter(i=>ATTN.includes(i.type)).length;
+  let msg=bad?`Chart generated. ${bad} item(s) need your attention (see Checks).`:'Chart generated. Everything is met.';
+  if(state.history.length&&mult>0)msg+=matched?` Mixed up from ${state.history.length} past chart(s).`:' None of the names in your past chart(s) match these students, so nothing was mixed up.';
+  toast(msg);
+}
+
+/* ---------- rendering ---------- */
+function chipHTML(s,flags){
+  const f=flags[s.id]||{};
+  return `<div class="chip${f.need||f.avoid?' bad':''}" data-sid="${s.id}" title="${esc(s.name)} — drag to move, double-click to pin"><span class="nm">${esc(s.name)}</span><span class="fl">${s.pinned?'<span title="Pinned">📌</span>':''}${(s.tags.length||s.extra.length||s.tNotes.length)?'<i class="hasneed" title="Has accommodations or teacher notes"></i>':''}</span></div>`;
+}
+function renderCanvas(an){
+  const room=$('#room');
+  let W=1000,H=620;
+  state.tables.forEach(t=>{W=Math.max(W,t.x+tableW(t)+60);H=Math.max(H,t.y+tableH(t)+60)});
+  state.objects.forEach(o=>{W=Math.max(W,o.x+o.w+40);H=Math.max(H,o.y+o.h+40)});
+  for(const k in state.markers){W=Math.max(W,state.markers[k].x+MARK[k].w+20);H=Math.max(H,state.markers[k].y+MARK[k].h+20)}
+  room.style.width=W+'px';room.style.height=H+'px';
+  const byId=new Map(state.students.map(s=>[s.id,s]));
+  let html='';
+  for(const k in state.markers){const m=state.markers[k],d=MARK[k];
+    html+=`<div class="marker ${d.cls}" data-marker="${k}" style="left:${m.x}px;top:${m.y}px;width:${d.w}px;height:${d.h}px">${d.label}</div>`}
+  for(const o of state.objects)
+    html+=`<div class="obj${state.selObj===o.id?' sel':''}${o.h>=2*o.w?' tall':''}" data-obj="${o.id}" data-kind="${o.kind}" style="left:${o.x}px;top:${o.y}px;width:${o.w}px;height:${o.h}px"><span>${esc(o.label)}</span><i class="rz" data-rz="${o.id}" title="Drag to resize"></i></div>`;
+  for(const t of state.tables){
+    const tier=tierOf(t.id), suffix=tier===0?' (not used)':tier>1?` · tier ${tier}`:'';
+    html+=`<div class="table${state.selTable===t.id?' sel':''}${tier===0?' unused':''}" data-table="${t.id}" style="left:${t.x}px;top:${t.y}px;width:${tableW(t)}px;height:${tableH(t)}px"><div class="thead" data-head="${t.id}">${esc(t.label)}<span class="priv">${suffix}</span></div>`;
+    for(const s of an.seats.filter(s=>s.tid===t.id)){
+      const sid=state.assign[s.key],st=sid&&byId.get(sid);
+      html+=`<div class="seat${s.disabled?' off':''}" data-seat="${s.key}" style="left:${s.lx}px;top:${s.ly}px" ${s.disabled?'title="Unavailable seat"':''}>${(!s.disabled&&st&&state.mode!=='edit')?chipHTML(st,an.flags):''}</div>`;
+    }
+    html+='</div>';
+  }
+  room.innerHTML=html;
+}
+function renderUnseated(an){
+  const seated=new Set(Object.values(state.assign));
+  const list=state.students.filter(s=>!seated.has(s.id));
+  $('#unseatedCount').textContent=list.length;
+  $('#unseated').innerHTML=list.length?list.map(s=>`<div class="item">${chipHTML(s,an.flags)}<button class="rm" data-rm="${s.id}" title="Remove ${esc(s.name)} from the list" aria-label="Remove ${esc(s.name)}">✕</button></div>`).join(''):
+    `<div class="empty">${state.students.length?'Everyone is seated.':'No students yet. Load a CSV or type names above.'}</div>`;
+}
+function renderChecks(an){
+  const needs=an.issues.filter(i=>ATTN.includes(i.type));
+  const b=$('#badge');b.textContent=needs.length;b.classList.toggle('ok',!needs.length);
+  let h='';
+  if(!state.students.length)h='<p class="hint">Load students to see checks here. They update every time you move someone.</p>';
+  else{
+    h+=needs.length?`<div class="sum bad">${needs.length} item(s) need attention</div>`:`<div class="sum ok">Accommodations, teacher notes and guidelines are all met</div>`;
+    const sec=(title,types)=>{const l=an.issues.filter(i=>types.includes(i.type));return l.length?`<h2>${title}</h2><ul class="issues">${l.map(i=>`<li class="${i.type}" data-sid="${i.sid||''}">${esc(i.text)}</li>`).join('')}</ul>`:''};
+    h+=sec('IEP / 504 accommodations not met',['need']);
+    h+=sec('Teacher notes not met',['tavoid','tnote']);
+    h+=sec('Keep-apart requests not met',['avoid']);
+    h+=sec('Seating guidelines and room setup',['guide','setup']);
+    h+=sec('Not seated',['unseated']);
+    h+=sec('Names not found',['ref']);
+    h+=sec('Student wishes not met',['pref']);
+    h+=sec('Fill-order suggestions',['tier']);
+    const simple=(title,note,list)=>list.length?`<h2>${title}</h2>${note?`<p class="hint">${note}</p>`:''}<ul class="issues">${list.map(t=>`<li class="remind">${esc(t)}</li>`).join('')}</ul>`:'';
+    if(an.variety){const v=an.variety;
+      h+=simple('Compared with past charts','',[
+        `${v.moved} of ${v.total} students (found in the most recent past chart) are at a different table.`,
+        v.pairNames.length?`${v.pairNames.length} pair(s) share a table again: ${v.pairNames.slice(0,8).join('; ')}${v.pairNames.length>8?'…':''}`:'No pairs share a table again.'])}
+    h+=simple('Set aside because of priority rules','Order of priority: IEP/504 accommodations, then teacher notes, then student requests.',an.overrides);
+    h+=simple('Other items to remember',"These can't be solved by seat position, so they are listed as reminders.",an.reminders);
+    h+=simple('How teacher notes were read','Check that each note was understood the way you meant it.',an.noteReads);
+    h+=`<p class="hint" style="margin-top:14px">Seat-based needs are measured from the Teacher desk and from any Door and Window objects you placed in the Room tab. "Front" is the closest third of seats, "back" the farthest third, "near" the closest fifth to quarter, and "away" the farther half.</p>`;
+  }
+  $('#checksBody').innerHTML=h;
+}
+function renderGuidePanel(){
+  const G=state.guide;
+  $('#tierList').innerHTML=state.tables.length?state.tables.map(t=>`<div class="tierrow"><span>${esc(t.label)} <small>${t.rows*t.cols} seats</small></span><select data-tier="${t.id}" aria-label="Fill tier for ${esc(t.label)}">${[[1,'Tier 1 (first)'],[2,'Tier 2'],[3,'Tier 3'],[0,'Not used']].map(([v,l])=>`<option value="${v}"${tierOf(t.id)===v?' selected':''}>${l}</option>`).join('')}</select></div>`).join(''):'<p class="hint">Add tables in the Room tab first.</p>';
+  $('#gMin').value=G.min||'';$('#gMax').value=G.max||'';$('#gMode').value=G.mode;$('#gVariety').value=G.variety;
+  const seats=getSeats().filter(s=>!s.disabled&&s.tier!==0).length;
+  const n=state.students.length;
+  $('#seatSummary').innerHTML=`${n} student(s), ${seats} usable seat(s).`+(n>seats?' <strong style="color:var(--bad)">There are more students than usable seats.</strong>':'');
+  $('#pastList').innerHTML=state.history.length?state.history.map((h,i)=>{
+    const m=state.students.filter(s=>h.byName.has(norm(s.name))).length;
+    return `<div class="item"><span class="pastname">${esc(h.file)}<small>${h.rows.length} seats${state.students.length?`, ${m} match current students`:''}</small></span><button class="rm" data-hrm="${i}" aria-label="Remove past chart">✕</button></div>`}).join(''):'<p class="hint">No past charts loaded.</p>';
+}
+function renderRoomPanel(){
+  const t=state.tables.find(x=>x.id===state.selTable), box=$('#tableEditor');
+  if(!t){box.innerHTML='<p class="hint">Click a table\'s title bar to select it.</p>'}
+  else{
+    box.innerHTML=`<div class="row">
+      <label class="field">Label<input type="text" id="tLabel" value="${esc(t.label)}"></label>
+      <label class="field">Seats across<input type="number" id="tCols" min="1" max="8" value="${t.cols}"></label>
+      <label class="field">Seats deep<input type="number" id="tRows" min="1" max="8" value="${t.rows}"></label></div>
+      <div class="row" style="margin-top:8px"><button class="btn small" id="tDup">Duplicate</button><button class="btn small danger" id="tDel">Delete table</button></div>`;
+    $('#tLabel').oninput=e=>{t.label=e.target.value;const h=document.querySelector(`[data-head="${t.id}"]`);if(h)h.firstChild.textContent=t.label;saveLayout()};
+    $('#tLabel').onchange=()=>renderAll();
+    const resize=()=>{t.cols=Math.max(1,Math.min(8,+$('#tCols').value||1));t.rows=Math.max(1,Math.min(8,+$('#tRows').value||1));for(const k of [...state.disabled])if(k.startsWith(t.id+':'))state.disabled.delete(k);prune();saveLayout();renderAll()};
+    $('#tCols').onchange=resize;$('#tRows').onchange=resize;
+    $('#tDup').onclick=()=>{const n={...t,id:nid('t'),label:t.label+' copy',x:t.x+30,y:t.y+30};state.tables.push(n);selectTable(n.id);saveLayout();renderAll()};
+    $('#tDel').onclick=()=>{state.tables=state.tables.filter(x=>x!==t);for(const k of [...state.disabled])if(k.startsWith(t.id+':'))state.disabled.delete(k);state.selTable=null;prune();saveLayout();renderAll()};
+  }
+  const o=state.objects.find(x=>x.id===state.selObj), ob=$('#objEditor');
+  if(!o){ob.innerHTML='<p class="hint">Click an object in the chart to select it. Drag it to move it, or drag its blue corner handle to resize.</p>';return}
+  ob.innerHTML=`<div class="row">
+    <label class="field">Label<input type="text" id="oLabel" value="${esc(o.label)}"></label>
+    <label class="field">Width<input type="number" id="oW" min="20" step="10" value="${o.w}"></label>
+    <label class="field">Height<input type="number" id="oH" min="20" step="10" value="${o.h}"></label></div>
+    <div class="row" style="margin-top:8px"><button class="btn small" id="oRot">Rotate 90°</button><button class="btn small" id="oDup">Duplicate</button><button class="btn small danger" id="oDel">Delete object</button></div>`;
+  $('#oLabel').oninput=e=>{o.label=e.target.value;const el=document.querySelector(`[data-obj="${o.id}"] span`);if(el)el.textContent=o.label;saveLayout()};
+  const sz=()=>{o.w=snapSize(+$('#oW').value||o.w);o.h=snapSize(+$('#oH').value||o.h);saveLayout();renderAll()};
+  $('#oW').onchange=sz;$('#oH').onchange=sz;
+  $('#oRot').onclick=()=>{[o.w,o.h]=[o.h,o.w];saveLayout();renderAll()};
+  $('#oDup').onclick=()=>{const n={...o,id:nid('o'),x:o.x+30,y:o.y+30};state.objects.push(n);selectObj(n.id);saveLayout();renderAll()};
+  $('#oDel').onclick=()=>{state.objects=state.objects.filter(x=>x!==o);state.selObj=null;saveLayout();renderAll()};
+}
+function renderAll(){
+  const an=lastAnalysis=analyze();
+  document.body.classList.toggle('editing',state.mode==='edit');
+  renderCanvas(an);renderUnseated(an);renderChecks(an);renderRoomPanel();renderGuidePanel();applyHighlights();
+}
+function applyHighlights(){
+  const sid=state.selStudent, s=state.students.find(x=>x.id===sid), info=$('#selInfo');
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('sel','rel-with','rel-avoid'));
+  if(!s){info.className='empty';info.textContent='Click a student to see their needs and preferences. Drag to swap or move seats.';return}
+  const r=buildModel().get(s.id);
+  const w=new Set([...r.withT,...r.withS].map(o=>o.id)), a=new Set([...r.avoidT,...r.avoidS].map(o=>o.id));
+  document.querySelectorAll('.chip').forEach(c=>{const id=c.dataset.sid;
+    if(id===sid)c.classList.add('sel');else if(w.has(id))c.classList.add('rel-with');else if(a.has(id))c.classList.add('rel-avoid')});
+  const parts=[`<strong>${esc(s.name)}</strong>`+(s.cls?` (${esc(s.cls)})`:'')];
+  const acc=r.acc.map(t=>TAGS[t]).concat(s.extra);
+  parts.push(acc.length?'IEP/504: '+esc(acc.join(', ')):'No listed accommodations');
+  if(s.tNotes.length)parts.push('Teacher notes: '+esc(s.tNotes.join('; ')));
+  const req=[...r.pref.map(t=>TAGS[t]),...r.withS.map(o=>'sit with '+o.name),...r.avoidS.map(o=>'apart from '+o.name)];
+  if(req.length)parts.push('Student requests: '+esc(req.join(', ')));
+  parts.push('Green = sit with, red = keep apart');
+  info.className='';info.innerHTML=parts.join(' &nbsp;|&nbsp; ');
+}
+
+/* ---------- interaction ---------- */
+let drag=null;
+const room=$('#room');
+function markSel(){
+  document.querySelectorAll('.table').forEach(el=>el.classList.toggle('sel',el.dataset.table===state.selTable));
+  document.querySelectorAll('.obj').forEach(el=>el.classList.toggle('sel',el.dataset.obj===state.selObj));
+}
+function selectTable(id){state.selTable=id;state.selObj=null;markSel();renderRoomPanel()}
+function selectObj(id){state.selObj=id;state.selTable=null;markSel();renderRoomPanel()}
+
+room.addEventListener('pointerdown',e=>{
+  if(state.mode==='edit'){
+    const rz=e.target.closest('[data-rz]'),ob=e.target.closest('[data-obj]'),mk=e.target.closest('[data-marker]'),hd=e.target.closest('[data-head]');
+    if(rz){const o=state.objects.find(x=>x.id===rz.dataset.rz);selectObj(o.id);
+      drag={kind:'resize',o,el:rz.closest('.obj'),sx:e.clientX,sy:e.clientY,w0:o.w,h0:o.h};e.preventDefault();startMove()}
+    else if(ob){const o=state.objects.find(x=>x.id===ob.dataset.obj);selectObj(o.id);
+      drag={kind:'obj',o,el:ob,ox:e.clientX-o.x,oy:e.clientY-o.y};e.preventDefault();startMove()}
+    else if(mk){const m=state.markers[mk.dataset.marker];drag={kind:'marker',m,el:mk,ox:e.clientX-m.x,oy:e.clientY-m.y};e.preventDefault();startMove()}
+    else if(hd){const t=state.tables.find(x=>x.id===hd.dataset.head);selectTable(t.id);
+      drag={kind:'table',t,el:hd.closest('.table'),ox:e.clientX-t.x,oy:e.clientY-t.y};e.preventDefault();startMove()}
+    else if(e.target===room){state.selTable=null;state.selObj=null;markSel();renderRoomPanel()}
+  } else {
+    const chip=e.target.closest('.chip');if(chip)startStudentDrag(e,chip);
+  }
+});
+$('#unseated').addEventListener('pointerdown',e=>{const chip=e.target.closest('.chip');if(chip)startStudentDrag(e,chip)});
+
+function startMove(){
+  const mv=e=>{
+    if(drag.kind==='resize'){
+      drag.o.w=snapSize(drag.w0+e.clientX-drag.sx);drag.o.h=snapSize(drag.h0+e.clientY-drag.sy);
+      drag.el.style.width=drag.o.w+'px';drag.el.style.height=drag.o.h+'px';return;
+    }
+    const nx=snap(e.clientX-drag.ox),ny=snap(e.clientY-drag.oy);
+    const tgt=drag.kind==='table'?drag.t:drag.kind==='obj'?drag.o:drag.m;
+    tgt.x=nx;tgt.y=ny;drag.el.style.left=nx+'px';drag.el.style.top=ny+'px';
+  };
+  const up=()=>{window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);drag=null;saveLayout();renderAll()};
+  window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);
+}
+function startStudentDrag(e,chip){
+  if(e.button!==undefined&&e.button!==0)return;
+  e.preventDefault();
+  const sid=chip.dataset.sid,sx=e.clientX,sy=e.clientY;let ghost=null,moved=false,over=null;
+  const mv=ev=>{
+    if(!moved&&Math.hypot(ev.clientX-sx,ev.clientY-sy)<5)return;
+    if(!moved){moved=true;ghost=chip.cloneNode(true);ghost.classList.add('ghost');document.body.appendChild(ghost);chip.classList.add('dragging')}
+    ghost.style.left=(ev.clientX-54)+'px';ghost.style.top=(ev.clientY-22)+'px';
+    const t=document.elementFromPoint(ev.clientX,ev.clientY),dz=t&&t.closest('.seat:not(.off),#unseated');
+    if(over!==dz){if(over)over.classList.remove('drop');over=dz;if(over)over.classList.add('drop')}
+  };
+  const up=()=>{
+    window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);
+    if(ghost)ghost.remove();
+    if(over)over.classList.remove('drop');
+    if(moved){
+      if(over){moveStudent(sid,over.id==='unseated'?null:over.dataset.seat)}
+      state.selStudent=sid;renderAll();
+    } else {state.selStudent=sid;applyHighlights()}
+  };
+  window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
+}
+function moveStudent(sid,dest){
+  const from=keyOfStudent(sid);
+  if(dest){
+    if(state.disabled.has(dest))return;
+    const other=state.assign[dest]; if(other===sid)return;
+    state.assign[dest]=sid;
+    if(from){if(other)state.assign[from]=other;else delete state.assign[from]}
+  } else if(from)delete state.assign[from];
+}
+document.addEventListener('dblclick',e=>{
+  const chip=e.target.closest('.chip');if(!chip||e.target.closest('.ghost'))return;
+  const s=state.students.find(x=>x.id===chip.dataset.sid);if(!s)return;
+  if(!keyOfStudent(s.id)){toast('Seat this student before pinning.');return}
+  s.pinned=!s.pinned;toast(s.pinned?`${s.name} pinned. Generate will keep them here.`:`${s.name} unpinned.`);renderAll();
+});
+room.addEventListener('click',e=>{
+  if(state.mode!=='edit')return;
+  const seat=e.target.closest('[data-seat]');if(!seat)return;
+  const k=seat.dataset.seat;
+  if(state.disabled.has(k))state.disabled.delete(k);else{state.disabled.add(k);delete state.assign[k]}
+  saveLayout();renderAll();
+});
+$('#unseated').addEventListener('click',e=>{
+  const rm=e.target.closest('[data-rm]');if(!rm)return;
+  const sid=rm.dataset.rm;state.students=state.students.filter(s=>s.id!==sid);if(state.selStudent===sid)state.selStudent=null;renderAll();
+});
+$('#checksBody').addEventListener('click',e=>{
+  const li=e.target.closest('li[data-sid]');if(!li||!li.dataset.sid)return;
+  state.selStudent=li.dataset.sid;applyHighlights();
+});
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{
+  const tab=b.dataset.tab;
+  document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));
+  document.querySelectorAll('.tabpane').forEach(p=>p.classList.toggle('on',p.id==='pane-'+tab));
+  state.mode=tab==='room'?'edit':'seat';renderAll();
+}));
+
+/* ---------- guidelines panel events ---------- */
+$('#tierList').addEventListener('change',e=>{const id=e.target.dataset.tier;if(!id)return;state.guide.tier[id]=+e.target.value;saveLayout();renderAll()});
+const num=v=>Math.max(0,Math.min(20,Math.floor(+v||0)));
+$('#gMin').onchange=e=>{state.guide.min=num(e.target.value);saveLayout();renderAll()};
+$('#gMax').onchange=e=>{state.guide.max=num(e.target.value);saveLayout();renderAll()};
+$('#gMode').onchange=e=>{state.guide.mode=e.target.value;saveLayout();renderAll()};
+$('#gVariety').onchange=e=>{state.guide.variety=e.target.value;saveLayout();renderAll()};
+$('#pastBtn').onclick=()=>$('#pastInput').click();
+$('#pastInput').onchange=async e=>{
+  const msgs=[];let bad=false;
+  for(const f of e.target.files){
+    try{const r=parsePast(await f.text(),f.name);if(r.err){bad=true;msgs.push(`${f.name}: ${r.err}`)}else{state.history.push(r.h);msgs.push(`${f.name}: ${r.h.rows.length} seats read.`)}}
+    catch(err){bad=true;msgs.push(`${f.name}: could not be read.`)}
+  }
+  e.target.value='';renderAll();
+  const n=$('#pastNotice');n.textContent=msgs.join('\n');n.className='notice'+(bad?' warn':'');n.style.display=msgs.length?'block':'none';
+};
+$('#pastNowBtn').onclick=()=>{
+  const an=analyze(),byId=new Map(state.students.map(s=>[s.id,s])), rows=[], byName=new Map();
+  for(const [k,sid] of Object.entries(state.assign)){const seat=an.seats.find(s=>s.key===k),st=byId.get(sid);
+    if(seat&&st){const rec={name:st.name,tl:seat.tlabel,tn:norm(seat.tlabel),r:seat.r+1,c:seat.c+1};rows.push(rec);byName.set(norm(st.name),rec)}}
+  if(!rows.length){toast('Seat some students first.');return}
+  state.history.push({file:'Chart from this session',cls:$('#className').value.trim(),rows,byName});renderAll();toast('Current chart saved as a past chart. Generate again to mix students up.');
+};
+$('#pastList').addEventListener('click',e=>{const b=e.target.closest('[data-hrm]');if(!b)return;state.history.splice(+b.dataset.hrm,1);renderAll()});
+
+/* ---------- buttons ---------- */
+$('#genBtn').onclick=()=>{if(state.mode==='edit')$('#tabbtn-students').click();generate()};
+$('#clearBtn').onclick=()=>{
+  const keep={};for(const[k,sid]of Object.entries(state.assign)){const s=state.students.find(x=>x.id===sid);if(s&&s.pinned)keep[k]=sid}
+  state.assign=keep;renderAll();toast('Seats cleared (pinned students stay).');
+};
+$('#printBtn').onclick=()=>window.print();
+window.addEventListener('beforeprint',()=>{const w=$('#room').offsetWidth,sc=Math.min(1,980/w);$('#room').style.zoom=sc});
+window.addEventListener('afterprint',()=>{$('#room').style.zoom=''});
+$('#teacherView').onchange=e=>document.body.classList.toggle('private-off',!e.target.checked);
+$('#className').addEventListener('input',updateTitle);
+
+$('#exportBtn').onclick=()=>{
+  const an=analyze(),byId=new Map(state.students.map(s=>[s.id,s])), cls=$('#className').value.trim();
+  const rows=[['Class','Table','Seat row','Seat column','Student']];
+  const seatByKey=new Map(an.seats.map(s=>[s.key,s]));
+  Object.entries(state.assign).map(([k,sid])=>[seatByKey.get(k),byId.get(sid)]).filter(x=>x[0]&&x[1])
+    .sort((a,b)=>a[0].tlabel.localeCompare(b[0].tlabel,undefined,{numeric:true})||a[0].r-b[0].r||a[0].c-b[0].c)
+    .forEach(([s,st])=>rows.push([cls,s.tlabel,s.r+1,s.c+1,st.name]));
+  const seated=new Set(Object.values(state.assign));
+  state.students.filter(s=>!seated.has(s.id)).forEach(s=>rows.push([cls,'(not seated)','','',s.name]));
+  const slug=cls.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase();
+  download(`seating-chart${slug?'-'+slug:''}.csv`,rows.map(r=>r.map(csvEsc).join(',')).join('\r\n'),'text/csv');
+  toast('Saved to your downloads. Load this file later in the Guidelines tab as a past chart. It contains student names, so store it carefully.');
+};
+
+$('#loadBtn').onclick=()=>$('#fileInput').click();
+$('#fileInput').onchange=async e=>{
+  const msgs=[];let bad=false;const classes=[];
+  for(const f of e.target.files){
+    try{const r=mergeCSV(await f.text());
+      if(r.err){bad=true;msgs.push(`${f.name}: ${r.err}`)}
+      else{msgs.push(`${f.name}: ${r.added} new, ${r.updated} updated.`);classes.push(...r.classes)}}
+    catch(err){bad=true;msgs.push(`${f.name}: could not be read as CSV. Save it as "CSV (Comma delimited)" and try again.`)}
+  }
+  e.target.value='';
+  if(classes.length){
+    const counts={};classes.forEach(c=>counts[c]=(counts[c]||0)+1);
+    const names=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+    $('#className').value=names[0];updateTitle();
+    msgs.push(`Class label set to "${names[0]}" from the file.`);
+    if(names.length>1){bad=true;msgs.push(`Warning: the file lists ${names.length} different classes (${names.join(', ')}). All students were loaded together. For separate charts, use one file per class.`)}
+  } else if(!$('#className').value.trim()&&msgs.length&&!bad)msgs.push('This file has no Class column. Type the class name in the box above the chart.');
+  renderAll();
+  const missing=lastAnalysis.issues.filter(i=>i.type==='ref');
+  if(missing.length){bad=true;msgs.push(`${missing.length} name(s) in "sit with" / "keep apart" columns don't match anyone (see Checks).`)}
+  showNotice(msgs.join('\n'),bad);
+};
+function showNotice(t,warn){const n=$('#notice');n.textContent=t;n.className='notice'+(warn?' warn':'');n.style.display=t?'block':'none'}
+$('#addNamesBtn').onclick=()=>{
+  const names=$('#namesBox').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  names.forEach(n=>{const s=findOrAdd(n);delete s._new});
+  $('#namesBox').value='';renderAll();if(names.length)toast(`${names.length} name(s) added.`);
+};
+$('#clearStudentsBtn').onclick=()=>{
+  if(!state.students.length)return;
+  if(confirm('Remove all students and clear the chart? Your room layout, guidelines and past charts stay.')){state.students=[];state.assign={};state.selStudent=null;showNotice('');renderAll()}
+};
+
+/* ---------- templates ---------- */
+$('#tplBtn').onclick=()=>{
+  const t=['Name,Class,Accommodations,Sit with,Keep apart,Teacher notes',
+    'Student A,Period 3 Biology,front; away from door,Student C,Student B,',
+    'Student B,Period 3 Biology,aisle; extended time on tests,,Student A,',
+    'Student C,Period 3 Biology,near teacher,Student A;Student D,,Keep apart from Student D',
+    'Student D,Period 3 Biology,,Student C,,Needs a calm spot; away from window'].join('\r\n');
+  download('students-template.csv',t,'text/csv');
+  toast('Template saved. Replace the example rows; keep row 1 (the headings).');
+};
+$('#formBtn').onclick=()=>{download('seating-worksheet.html',worksheetHTML(),'text/html');toast('Worksheet saved. Open it from your downloads folder.')};
+function worksheetHTML(){
+return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Seating plan worksheet</title><style>
+body{font-family:"Segoe UI",system-ui,sans-serif;max-width:1000px;margin:24px auto;padding:0 18px 40px;color:#1d2b3a;line-height:1.45}
+h1{font-size:25px;margin:0 0 4px}h2{font-size:17px;margin:28px 0 6px;border-bottom:2px solid #2b6f90;padding-bottom:3px}
+.sub{color:#5d6d7b;margin:0 0 14px}
+label.l{display:block;font-weight:600;margin:12px 0 3px}
+input[type=text],textarea{width:100%;padding:7px 9px;border:1px solid #9fb3bf;border-radius:6px;font:inherit}
+table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #9fb3bf;padding:2px}th{background:#e5eef3;text-align:left;padding:6px}
+td input{width:100%;border:0;padding:6px;font:inherit;background:transparent}
+.btn{padding:8px 14px;border:1px solid #1f5671;background:#2b6f90;color:#fff;border-radius:6px;font:inherit;font-weight:600;cursor:pointer;margin:10px 8px 0 0}
+.btn.alt{background:#fff;color:#1d2b3a;border-color:#9fb3bf}
+.box{background:#f2f7fa;border-left:4px solid #2b6f90;padding:8px 12px;margin:10px 0;font-size:13.5px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
+@media print{.noprint{display:none}body{margin:0}input,textarea{border-color:#888}}
+</style></head><body>
+<h1>Seating plan worksheet</h1>
+<p class="sub">Fill this in on screen, save the student file, then load it in the Seating Chart Builder. Nothing here is uploaded anywhere.</p>
+
+<h2>1. Class</h2>
+<label class="l" for="cls">Class or period (this becomes the chart label)</label>
+<input type="text" id="cls" placeholder="e.g. Period 3 Biology">
+
+<h2>2. Students</h2>
+<div class="box"><strong>Priority order:</strong> IEP/504 accommodations come first, then your teacher notes, then student requests. If a teacher note goes against a student request, the note wins.<br>
+<strong>Accommodations and teacher notes the builder understands:</strong> front of room; near teacher; back of room; near door; away from door; near window; away from window; aisle / accessible. Anything else (for example "extended time") is kept as a reminder.<br>
+<strong>Teacher notes</strong> can also name students: "keep apart from Jordan Lee" or "sit with Sam Ortiz".<br>
+Separate several entries in one box with semicolons. Names in Sit with / Keep apart should match the Name column.</div>
+<table><thead><tr><th>Name</th><th>IEP / 504 accommodations</th><th>Sit with (student request)</th><th>Keep apart (student request)</th><th>Teacher notes</th></tr></thead><tbody id="tb"></tbody></table>
+<div class="noprint"><button class="btn alt" onclick="addRows(5)">Add 5 more rows</button><button class="btn" onclick="save()">Save student file (CSV)</button><button class="btn alt" onclick="window.print()">Print worksheet</button></div>
+
+<h2>3. Seating guidelines (enter these in the builder's Guidelines tab)</h2>
+<div class="g2">
+<div><label class="l">Fill these tables first (Tier 1)</label><input type="text" placeholder="e.g. Tables 1, 3, 5"></div>
+<div><label class="l">Then fill these (Tier 2)</label><input type="text" placeholder="e.g. Tables 2, 4"></div>
+<div><label class="l">Tables NOT to use</label><input type="text" placeholder="e.g. Table 6"></div>
+<div><label class="l">Fewest students at a table that is used</label><input type="text" placeholder="e.g. 3"></div>
+<div><label class="l">Most students at a table</label><input type="text" placeholder="e.g. 4"></div>
+<div><label class="l">How to fill</label><input type="text" placeholder="no preference / fill each table before the next / spread evenly"></div>
+</div>
+<label class="l">Past seating chart to mix up from</label><input type="text" placeholder="File name of the exported chart, and how much to change (gentle or strong)">
+<label class="l">Other notes about the room or the class</label><textarea rows="4"></textarea>
+
+<script>
+var heads=['Name','Accommodations','Sit with','Keep apart','Teacher notes'];
+function addRows(n){var tb=document.getElementById('tb');for(var i=0;i<n;i++){var tr=document.createElement('tr');for(var j=0;j<5;j++){var td=document.createElement('td');var inp=document.createElement('input');inp.type='text';inp.setAttribute('aria-label',heads[j]);td.appendChild(inp);tr.appendChild(td)}tb.appendChild(tr)}}
+function q(v){v=String(v);return /[",\\n\\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function save(){
+  var cls=document.getElementById('cls').value.trim(),rows=[['Name','Class','Accommodations','Sit with','Keep apart','Teacher notes']];
+  document.querySelectorAll('#tb tr').forEach(function(tr){var v=[].map.call(tr.querySelectorAll('input'),function(i){return i.value.trim()});if(v[0])rows.push([v[0],cls,v[1],v[2],v[3],v[4]])});
+  if(rows.length<2){alert('Type at least one student name first.');return}
+  var csv=rows.map(function(r){return r.map(q).join(',')}).join('\\r\\n');
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='students'+(cls?'-'+cls.replace(/[^a-z0-9]+/gi,'-').toLowerCase():'')+'.csv';document.body.appendChild(a);a.click();a.remove();
+}
+addRows(14);
+<\/script></body></html>`;
+}
+
+/* ---------- room buttons ---------- */
+$('#gridBtn').onclick=()=>{
+  if(state.tables.length&&!confirm('Replace your current tables with a new grid? Seat assignments and table tiers will be cleared. Other objects stay.'))return;
+  const n=id=>Math.max(1,+$(id).value||1);
+  buildGrid(n('#gAcross'),n('#gDown'),n('#gCols'),n('#gRows'));saveLayout();renderAll();
+};
+$('#addTableBtn').onclick=()=>{
+  const cols=Math.max(1,Math.min(8,+$('#aCols').value||1)),rows=Math.max(1,Math.min(8,+$('#aRows').value||1));
+  const t={id:nid('t'),label:'Table '+(state.tables.length+1),x:40,y:40,cols,rows};
+  state.tables.push(t);state.selTable=t.id;state.selObj=null;saveLayout();renderAll();
+};
+$('#addObjBtn').onclick=()=>{
+  const o=mkObj($('#oKind').value,40,40);
+  state.objects.push(o);state.selObj=o.id;state.selTable=null;saveLayout();renderAll();
+};
+$('#saveLayoutBtn').onclick=()=>download('room-layout.json',JSON.stringify(layoutObject(),null,1),'application/json');
+$('#loadLayoutBtn').onclick=()=>$('#layoutInput').click();
+$('#layoutInput').onchange=async e=>{
+  try{const o=JSON.parse(await e.target.files[0].text());if(!o.tables||!o.markers)throw 0;applyLayout(o);saveLayout();renderAll();toast('Layout loaded.')}
+  catch(err){toast('That file is not a valid layout file.')}
+  e.target.value='';
+};
+$('#resetLayoutBtn').onclick=()=>{if(confirm('Reset the room to the starter layout? This removes your tables, objects and guidelines.')){state.guide=defaultGuide();buildGrid(3,2,2,2);starterObjects();saveLayout();renderAll()}};
+
+/* ---------- start ---------- */
+$('#oKind').innerHTML=Object.entries(OBJ_KINDS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+if(!loadSavedLayout()){buildGrid(3,2,2,2);starterObjects()}
+renderAll();
+</script>
+</body>
+</html>
